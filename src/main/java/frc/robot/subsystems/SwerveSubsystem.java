@@ -1,5 +1,18 @@
 package frc.robot.subsystems;
 
+import com.ctre.phoenix.motorcontrol.ControlMode;
+import com.ctre.phoenix.sensors.CANCoder;
+import com.ctre.phoenix.sensors.CANCoderConfiguration;
+import com.ctre.phoenix6.configs.CANcoderConfiguration;
+import com.ctre.phoenix6.configs.TalonFXConfiguration;
+import com.ctre.phoenix6.hardware.TalonFX;
+import com.ctre.phoenix6.hardware.core.CoreCANcoder;
+import com.pathplanner.lib.auto.AutoBuilder;
+//import com.pathplanner.lib.config.PIDConstants;
+import com.pathplanner.lib.config.RobotConfig;
+import com.pathplanner.lib.controllers.PPHolonomicDriveController;
+import com.studica.frc.AHRS;
+
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -7,23 +20,14 @@ import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.kinematics.SwerveDriveOdometry;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
+import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.Swerve;
 import frc.robot.Constants.SwervePorts;
-import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.LimelightHelpers;
-
-import com.pathplanner.lib.auto.AutoBuilder;
-//import com.pathplanner.lib.config.PIDConstants;
-import com.pathplanner.lib.config.RobotConfig;
-import com.pathplanner.lib.controllers.PPHolonomicDriveController;
-import com.studica.frc.AHRS;
-import edu.wpi.first.math.kinematics.SwerveModuleState;
-import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.Encoder;
-import edu.wpi.first.wpilibj.motorcontrol.PWMSparkMax;
-
 
 
 public class SwerveSubsystem extends SubsystemBase {
@@ -57,38 +61,31 @@ public class SwerveSubsystem extends SubsystemBase {
 
         frontLeft = new SwerveModule(
             SwervePorts.FRONT_LEFT_DRIVE_MOTOR, SwervePorts.FRONT_LEFT_STEER_MOTOR,
-            SwervePorts.FRONT_LEFT_DRIVE_ENCODER_A, SwervePorts.FRONT_LEFT_DRIVE_ENCODER_B,
-            SwervePorts.FRONT_LEFT_STEER_ENCODER_A, SwervePorts.FRONT_LEFT_STEER_ENCODER_B,
+            SwervePorts.FRONT_LEFT_CANCODER,
             Swerve.FRONT_LEFT_MODULE_DRIVE_OFFSET, Swerve.FRONT_LEFT_MODULE_STEER_OFFSET
-
         );
 
 
 
         frontRight = new SwerveModule(
             SwervePorts.FRONT_RIGHT_DRIVE_MOTOR, SwervePorts.FRONT_RIGHT_STEER_MOTOR,
-            SwervePorts.FRONT_RIGHT_DRIVE_ENCODER_A, SwervePorts.FRONT_RIGHT_DRIVE_ENCODER_B,
-            SwervePorts.FRONT_RIGHT_STEER_ENCODER_A, SwervePorts.FRONT_RIGHT_STEER_ENCODER_B,
+            SwervePorts.FRONT_RIGHT_CANCODER,
             Swerve.FRONT_RIGHT_MODULE_DRIVE_OFFSET, Swerve.FRONT_RIGHT_MODULE_STEER_OFFSET
-
         );
 
 
 
         backLeft = new SwerveModule(
             SwervePorts.BACK_LEFT_DRIVE_MOTOR, SwervePorts.BACK_LEFT_STEER_MOTOR,
-            SwervePorts.BACK_LEFT_DRIVE_ENCODER_A, SwervePorts.BACK_LEFT_DRIVE_ENCODER_B,
-            SwervePorts.BACK_LEFT_STEER_ENCODER_A, SwervePorts.BACK_LEFT_STEER_ENCODER_B,
+            SwervePorts.BACK_LEFT_CANCODER,
             Swerve.BACK_LEFT_MODULE_DRIVE_OFFSET, Swerve.BACK_LEFT_MODULE_STEER_OFFSET
-
         );
 
 
 
         backRight = new SwerveModule(
             SwervePorts.BACK_RIGHT_DRIVE_MOTOR, SwervePorts.BACK_RIGHT_STEER_MOTOR,
-            SwervePorts.BACK_RIGHT_DRIVE_ENCODER_A, SwervePorts.BACK_RIGHT_DRIVE_ENCODER_B,
-            SwervePorts.BACK_RIGHT_STEER_ENCODER_A, SwervePorts.BACK_RIGHT_STEER_ENCODER_B,
+            SwervePorts.BACK_RIGHT_CANCODER,
             Swerve.BACK_RIGHT_MODULE_DRIVE_OFFSET, Swerve.BACK_RIGHT_MODULE_STEER_OFFSET
         );
 
@@ -296,19 +293,25 @@ public class SwerveSubsystem extends SubsystemBase {
 
 
 class SwerveModule {
-    private final PWMSparkMax driveMotor;
-    private final PWMSparkMax steerMotor;
-    private final Encoder driveEncoder;
-    private final Encoder steerEncoder;
+    private final TalonFX driveMotor;
+    private final TalonFX steerMotor;
+    private final CoreCANcoder steerEncoder;
     private final double driveEncoderOffset;
     private final double steerEncoderOffset;
 
 
-    public SwerveModule(int driveMotorPort, int steerMotorPort, int driveEncoderPortA, int driveEncoderPortB, int steerEncoderPortA, int steerEncoderPortB, double driveEncoderOffset, double steerEncoderOffset) {
-        driveMotor = new PWMSparkMax(driveMotorPort);
-        steerMotor = new PWMSparkMax(steerMotorPort);
-        driveEncoder = new Encoder(driveEncoderPortA, driveEncoderPortB);
-        steerEncoder = new Encoder(steerEncoderPortA, steerEncoderPortB);
+    public SwerveModule(int driveMotorPort, int steerMotorPort, int steerEncoderPort, double driveEncoderOffset, double steerEncoderOffset) {
+        driveMotor = new TalonFX(driveMotorPort);
+        steerMotor = new TalonFX(steerMotorPort);
+        steerEncoder = new CoreCANcoder(steerEncoderPort);
+
+        TalonFXConfiguration driveMotorConfig = new TalonFXConfiguration();
+        TalonFXConfiguration steerMotorConfig = new TalonFXConfiguration();
+        CANcoderConfiguration steerEncoderConfig = new CANcoderConfiguration();
+
+        driveMotor.getConfigurator().apply(driveMotorConfig);
+        steerMotor.getConfigurator().apply(steerMotorConfig);
+        steerEncoder.getConfigurator().apply(steerEncoderConfig);
 
         this.driveEncoderOffset = driveEncoderOffset;
         this.steerEncoderOffset = steerEncoderOffset;
@@ -317,12 +320,12 @@ class SwerveModule {
 
 
     public SwerveModuleState getState() {
-        double adjustedDriveRate = driveEncoder.getRate() + driveEncoderOffset;
-        double adjustedSteerDistance = steerEncoder.getDistance() + steerEncoderOffset;
+        double adjustedDriveRate = driveMotor.getSelectedSensorVelocity() * Swerve.DRIVE_ENCODER_VELOCITY_CONVERSION;
+        double adjustedSteerAngle = steerEncoder.getPosition() - steerEncoderOffset;
 
         return new SwerveModuleState(
             adjustedDriveRate,
-            new Rotation2d(Math.toRadians(adjustedSteerDistance))
+            Rotation2d.fromDegrees(adjustedSteerAngle)
         );
 
     }
@@ -330,12 +333,12 @@ class SwerveModule {
 
 
     public SwerveModulePosition getPosition() {
-        double adjustedDriveDistance = driveEncoder.getDistance() + driveEncoderOffset;
-        double adjustedSteerDistance = steerEncoder.getDistance() + steerEncoderOffset;
+        double adjustedDriveDistance = driveMotor.getSelectedSensorPosition() * Swerve.DRIVE_ENCODER_POSITION_CONVERSION;
+        double adjustedSteerAngle = steerEncoder.getPosition() - steerEncoderOffset;
 
         return new SwerveModulePosition(
             adjustedDriveDistance,
-            new Rotation2d(Math.toRadians(adjustedSteerDistance))
+            Rotation2d.fromDegrees(adjustedSteerAngle)
         );
 
     }
@@ -353,8 +356,8 @@ class SwerveModule {
             );
         }
 
-        driveMotor.set(desiredState.speedMetersPerSecond / 3.0);
-        steerMotor.set(desiredState.angle.getRadians() / Math.PI);
+        driveMotor.set(ControlMode.PercentOutput, desiredState.speedMetersPerSecond / Swerve.MAX_SPEED_METERS_PER_SECOND);
+        steerMotor.set(ControlMode.Position, desiredState.angle.getDegrees() + steerEncoderOffset);
     }
 
-} 
+}
